@@ -117,7 +117,7 @@ class VentanaPrincipal(ctkinter.CTk):
             return
 
         # Filtrar y acumular datos usando la lógica del procesador
-        self.datos_procesados_invitados = self.procesador.obtain_usuarios_invitados(self.registros_validos, f_inicio, f_fin)
+        self.datos_procesados_invitados = self.procesador.obtener_usuarios_invitados(self.registros_validos, f_inicio, f_fin)
         
         # Refrescar la pantalla de la interfaz
         self.txt_resultado_invitados.delete("1.0", ctkinter.END)
