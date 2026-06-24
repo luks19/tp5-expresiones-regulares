@@ -9,7 +9,7 @@ class ProcesadorDatos:
     """
     def __init__(self):
         # Patrón Regex para identificar variantes de 'guest' o 'invitado' (case-insensitive)
-        self.patron_invitado = re.compile(r"^(?i)(guest|invitado).*$")
+        self.patron_invitado = re.compile(r"(?i)^(guest|invitado).*$")
 
     def obtener_usuarios_invitados(self, registros_validos, fecha_inicio_str, fecha_fin_str):
         """
