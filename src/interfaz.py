@@ -1,3 +1,4 @@
+import re
 import customtkinter as ctkinter
 from tkinter import filedialog, messagebox
 from validador import MotorValidacion
@@ -5,7 +6,7 @@ from procesador import ProcesadorDatos
 from reportes import GeneradorReportes
 
 # Configuración estética global de la interfaz gráfica
-ctkinter.set_appearance_mode("System")  # Adapta el tema claro/oscuro según el sistema operativo
+ctkinter.set_appearance_mode("System")
 ctkinter.set_default_color_theme("blue")
 
 class VentanaPrincipal(ctkinter.CTk):
@@ -19,6 +20,9 @@ class VentanaPrincipal(ctkinter.CTk):
         # Instanciación de las clases lógicas del sistema
         self.validador = MotorValidacion()
         self.procesador = ProcesadorDatos()
+        
+        # Patrón Regex para validar el formato de fecha ingresado por el usuario
+        self.patron_fecha_ui = re.compile(r"^\d{4}-\d{2}-\d{2}$")
         
         # Variables de estado en memoria
         self.registros_validos = []
@@ -83,7 +87,7 @@ class VentanaPrincipal(ctkinter.CTk):
         ruta = filedialog.askopenfilename(filetypes=[("Archivos CSV", "*.csv")])
         if ruta:
             self.ruta_csv = ruta
-            self.lbl_ruta.configure(text=ruta, text_color="white")
+            self.lbl_ruta.configure(text=ruta)
             
             # Procesamiento sintáctico inmediato mediante el Motor de Validación
             validos, descartados = self.validador.procesar_archivo_csv(ruta)
@@ -109,11 +113,21 @@ class VentanaPrincipal(ctkinter.CTk):
             messagebox.showwarning("Advertencia", "Debe cargar un archivo CSV válido antes de ejecutar el análisis.")
             return
 
-        f_inicio = self.txt_desde.get()
-        f_fin = self.txt_hasta.get()
+        f_inicio = self.txt_desde.get().strip()
+        f_fin = self.txt_hasta.get().strip()
 
         if not f_inicio or not f_fin:
             messagebox.showwarning("Campos vacíos", "Por favor introduzca ambas fechas de corte.")
+            return
+
+        # Validar formato AAAA-MM-DD mediante expresión regular antes de procesar
+        if not self.patron_fecha_ui.match(f_inicio) or not self.patron_fecha_ui.match(f_fin):
+            messagebox.showwarning("Formato inválido", "Las fechas deben tener el formato AAAA-MM-DD (ejemplo: 2026-01-15).")
+            return
+
+        # Validar que la fecha de inicio no sea posterior a la fecha de fin
+        if f_inicio > f_fin:
+            messagebox.showwarning("Rango inválido", "La fecha de inicio debe ser anterior o igual a la fecha de fin.")
             return
 
         # Filtrar y acumular datos usando la lógica del procesador
@@ -124,23 +138,24 @@ class VentanaPrincipal(ctkinter.CTk):
         self.txt_resultado_invitados.insert("1.0", f"REPORTE CONSOLIDADO DE USUARIOS INVITADOS\n")
         self.txt_resultado_invitados.insert(ctkinter.END, f"Período evaluado: {f_inicio} hasta {f_fin}\n")
         self.txt_resultado_invitados.insert(ctkinter.END, f"Cantidad total de invitados detectados: {len(self.datos_procesados_invitados)}\n")
-        self.txt_resultado_invitados.insert(ctkinter.END, "="*85 + "\n\n")
+        self.txt_resultado_invitados.insert(ctkinter.END, "="*95 + "\n\n")
         
         if not self.datos_procesados_invitados:
             self.txt_resultado_invitados.insert(ctkinter.END, "No se registraron conexiones de invitados en el intervalo de fechas provisto.")
             self.btn_exportar.configure(state="disabled")
             return
 
-        # Formatear la salida como tabla en formato texto de ancho fijo
-        plantilla_cabecera = "{:<25} | {:<12} | {:<20} | {:<20}\n"
-        plantilla_fila = "{:<25} | {:<12} | {:<20} | {:<20}\n"
+        # Formatear la salida como tabla en formato texto de ancho fijo (5 columnas)
+        plantilla_cabecera = "{:<25} | {:<12} | {:<20} | {:<20} | {:<20}\n"
+        plantilla_fila = "{:<25} | {:<12} | {:<20} | {:<20} | {:<20}\n"
         
-        self.txt_resultado_invitados.insert(ctkinter.END, plantilla_cabecera.format("Usuario Invitado", "Conexiones", "Tráfico Subida (B)", "Tráfico Total (B)"))
-        self.txt_resultado_invitados.insert(ctkinter.END, "-"*85 + "\n")
+        self.txt_resultado_invitados.insert(ctkinter.END, plantilla_cabecera.format(
+            "Usuario Invitado", "Conexiones", "Tráfico Bajada (B)", "Tráfico Subida (B)", "Tráfico Total (B)"))
+        self.txt_resultado_invitados.insert(ctkinter.END, "-"*95 + "\n")
         
         for user, met in self.datos_procesados_invitados.items():
             self.txt_resultado_invitados.insert(ctkinter.END, plantilla_fila.format(
-                user, met["conexiones"], met["output_bytes"], met["trafico_total_bytes"]
+                user, met["conexiones"], met["input_bytes"], met["output_bytes"], met["trafico_total_bytes"]
             ))
             
         # Habilitar el botón de exportación a Excel tras procesar con éxito
@@ -148,7 +163,14 @@ class VentanaPrincipal(ctkinter.CTk):
 
     def exportar_reporte(self):
         """Dispara el módulo de persistencia de datos para guardar el archivo Excel."""
-        exito, msg = GeneradorReportes.exportar_invitados_a_excel(self.datos_procesados_invitados)
+        ruta = filedialog.asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Archivos Excel", "*.xlsx")],
+            initialfile="reporte_invitados.xlsx"
+        )
+        if not ruta:
+            return
+        exito, msg = GeneradorReportes.exportar_invitados_a_excel(self.datos_procesados_invitados, ruta)
         if exito:
             messagebox.showinfo("Éxito", msg)
         else:
